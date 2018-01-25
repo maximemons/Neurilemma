@@ -5,7 +5,7 @@ LD=gcc
 CFLAGS=-Wall -W -Werror
 LDFLAGS=
 # Le nom de l’exécutable à fabriquer
-EXE=pawnee
+EXE=neurilemma
 
 # Les variables HEADERS, CFILES et OBJS vont contenir respectivement
 # la listes des fichiers .h, .c et le nom des fichiers .o à fabriquer
@@ -42,15 +42,15 @@ $(EXE): $(OBJS)
 # tous les fichiers .c qui incluent ce fichier sont recompilés
 # Après votre première compilation, regardez le contenu du fichier
 # makefile.dep généré afin de comprendre exactement de quoi il retourne.
-makefile . dep : $(CFILES) $(HEADERS)
-	$(CC) -MM $ (CFILES) > $@
+makefile.dep : $(CFILES) $(HEADERS)
+	$(CC) -MM $(CFILES) > $@
 
 # Cette règle efface le fichier de dépendances et les fichiers .o
-clean :
+clean:
 	$(RM) $(OBJS) makefile.dep
 
 # Cette règle effectue la précédente et efface en plus l’exécutable
-mrproper : clean
+mrproper: clean
 	$(RM) $(EXE)
 
 # On inclue le fichier de dépendance qui va contenir les règles
