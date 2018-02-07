@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 int creer_serveur(int port){
-	int socket_serveur;
+	int socket_serveur, optval;
 
 	socket_serveur = socket(AF_INET, SOCK_STREAM, 0);
 	if(socket_serveur == -1){
@@ -22,6 +22,12 @@ int creer_serveur(int port){
 
 	if(bind(socket_serveur, (struct sockaddr *)& saddr, sizeof(saddr)) == -1){
 		perror("bind socker_serveur");
+		return -1;
+	}
+
+	optval = 1;
+	if(setsockopt(socket_serveur, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(int)) == -1){
+		perror("Can not set SO_REUSEADDR option");
 		return -1;
 	}
 
