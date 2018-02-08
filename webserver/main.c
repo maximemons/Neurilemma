@@ -4,10 +4,18 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "socket.h"
+#include <signal.h>
 
+
+void initialiser_signaux(void){
+	if(signal(SIGPIPE, SIG_IGN) == SIG_ERR){
+		perror("signal");
+	}
+}
 
 int main(/*int argc, char** argv*/){
-	
+	void initialiser_signaux(void);
+
 	int socket_serveur, socket_client;
 	socket_serveur = creer_serveur(8080);
 
