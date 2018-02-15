@@ -71,9 +71,8 @@ int main(int argc, char** argv){
 						break;
 					}
 				}*/
-				if(fgets(buf, SIZE_BUF, client) == NULL)
-					break;
-				if(fprintf(client))
+				if(fgets(buf, SIZE_BUF, client) == NULL) break;
+				if(fprintf(client, "%s", buf) < 0) break;
 			}
 			close(socket_client);	
 			return 0;
