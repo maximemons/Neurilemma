@@ -29,8 +29,8 @@ void initialiser_signaux(void){
 		perror("sigaction (SIGCHLD)");
 }
 void badRequest(FILE *client, int code){
-	if(code == 400)fprintf(client, "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 17\r\n\r\n400 Bad Request\r\n");
-	if(code == 404)fprintf(client, "HTTP/1.1 400 Not Found\r\nConnection: close\r\nContent-Length: 15\r\n\r\n404 Not Found\r\n");
+	if(code == 400) fprintf(client, "HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 17\r\n\r\n400 Bad Request\r\n");
+	else if(code == 404) fprintf(client, "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 15\r\n\r\n404 Not Found\r\n");
 	exit(0);
 }
 void goodRequest(FILE *client, const char* msg){
@@ -66,7 +66,6 @@ int main(int argc, char** argv){
 			close(socket_serveur);
 			//write(socket_client, message_bienvenue, strlen(message_bienvenue));
 			char buf[SIZE_BUF];
-
 			FILE *client = fdopen(socket_client, "w+");
 			while(1){
 				int request = 400; // 1 => OK; 400 => Bad Request; 404 => Not Found
@@ -74,7 +73,6 @@ int main(int argc, char** argv){
 
 				// On récupére la première ligne de l'en-tete
 				if(fgets(buf, SIZE_BUF, client) == NULL) break;
-
 				// On vérifie si la première ligne est du type GET / HTTP/1.* (* = {0;1})
 				char* token = strtok(buf, " ");
 				char *comp[4] = {"GET", "/", "HTTP/1.0\r\n", "HTTP/1.1\r\n"};
@@ -92,9 +90,9 @@ int main(int argc, char** argv){
 				// On lit jusqu'a la fin de l'en-tete, i.e. ligne = \r\n
 				while(fgets(buf, SIZE_BUF, client))
 					if(strcmp(buf, "\r\n") == 0) break;
-
+				printf("%d\n", request);
 				// On envoie une réponse au client selon la nature de l'en-tete
-				if(request) goodRequest(client, message_bienvenue);
+				if(request == 1) goodRequest(client, message_bienvenue);
 				else badRequest(client, request);
 			}
 			close(socket_client);	
