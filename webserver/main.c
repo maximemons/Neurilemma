@@ -44,6 +44,7 @@ int main(int argc, char** argv){
 
 	initialiser_signaux();
 
+	//On vérifie si on donne un port particulier au serveur
 	if(argc > 1){
 		socket_serveur = creer_serveur(atoi(argv[1]));
 		printf("Sever running on port %d\n", atoi(argv[1]));
@@ -68,49 +69,33 @@ int main(int argc, char** argv){
 
 			FILE *client = fdopen(socket_client, "w+");
 			while(1){
-				int request = 400;
+				int request = 400; // 1 => OK; 400 => Bad Request; 404 => Not Found
 				bzero(buf,SIZE_BUF);
-				// 1er Fgets pour récuprer la premiere ligne (la ligne GET)
+
+				// On récupére la première ligne de l'en-tete
 				if(fgets(buf, SIZE_BUF, client) == NULL) break;
-				// Analyser la requetet ... sauvegarder le resultat dans un boolean
+
+				// On vérifie si la première ligne est du type GET / HTTP/1.* (* = {0;1})
 				char* token = strtok(buf, " ");
 				char *comp[4] = {"GET", "/", "HTTP/1.0\r\n", "HTTP/1.1\r\n"};
 				int cpt;
-				//int valide = 0;
+				int valide = 0;
 				for(cpt = 0; cpt < 4; cpt++){
-					printf("%s & %s => %d\n", token, comp[cpt], strcmp(token, comp[cpt]));
+					if(strcmp(token, comp[cpt]) != 0) valide++;
 					if(cpt != 2) token = strtok(NULL, " ");
-				}printf("%s & %s => %d\n", "TEST", "TEST", strcmp("TEST", "TEST"));
-				printf("%s & %s => %d\n", "HTTP/1.1", "HTTP1.1", strcmp("HTTP/1.1", "HTTP/1.1"));
-				fflush(stdout);
-
-    			/*char *token;
-    			char *comp[4] = {"GET", "/", "HTTP/1.0", "HTTP/1.1"};
-			    token = strtok(buf," ");
-			    int cpt;
-			    int check = 0;
-			    for(cpt = 0; cpt < 5; cpt++)
-			    	if(strncmp(token, comp[cpt], strlen(comp[cpt])) != 0) check++;
-			    printf("%d", check);
-			    fflush(stdout);
-			    if(check) request = 1;
-
-				if(strncmp(buf,"GET ",4)==0 && strncmp(buf + 4, "/", 1)==0 && (strncmp(buf + 6, "HTTP/1.1", 8)==0 || strncmp(buf + 6, "HTTP/1.0", 8)==0)){
-					if(strncmp(buf + 4, "/ ", 2)==0) request = 1;
-					else request = 404;
-				}*/
-				/*Skip header*/
-				while(fgets(buf, SIZE_BUF, client)){
-					if(strcmp(buf, "\r\n") == 0){
-						break;
-					}
+				}if(valide == 1) request = 1;
+				else{
+					token = strtok(buf, " ");
+					if(strcmp(token, "GET") == 0) request = 404; 
 				}
-				request = 1;
-				// Envoyer réponse !!!
-				//fprintf(client, "%s", message_bienvenue);
+
+				// On lit jusqu'a la fin de l'en-tete, i.e. ligne = \r\n
+				while(fgets(buf, SIZE_BUF, client))
+					if(strcmp(buf, "\r\n") == 0) break;
+
+				// On envoie une réponse au client selon la nature de l'en-tete
 				if(request) goodRequest(client, message_bienvenue);
 				else badRequest(client, request);
-
 			}
 			close(socket_client);	
 			return 0;
