@@ -63,7 +63,7 @@ int parse_http_request(char *request_line, http_request *request){
 		if(i == 0) request -> method = (strcmp(token, "GET") == 0 ? HTTP_GET : HTTP_UNSUPPORTED);
 		else if(i == 1)
 			if(strcmp(token, "/") == 0) request -> target = "/";
-			else request -> target = token;
+			else request -> target = "bite/test.html?name=max";
 		else
 			if(strncmp(token, "HTTP/1.0", 8) == 0 || strncmp(token, "HTTP/1.1", 8) == 0){
 				request -> major_version = (int)token[5];
@@ -101,7 +101,15 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 	}if(ok == 0) exit(0);
 }
 
+char *rewrite_target(char *target){
+	printf("%s\n", strchr(target, '?'));
+	return (strchr(target, '?') != 0 ? strtok(target, "?") : target);
+}
+
 int main(int argc, char** argv){
+	/***
+	./neurilemma [PORT] []
+	***/
 	int socket_serveur, socket_client;
 	//const char* message_bienvenue = "\n\n\e[2m*******************************************************\n	neurilemma - noun [nu̇r-ə-ˈle-mə] : the plasma\n  membrane surrounding a Schwann cell of a myelinated\n  nerve fiber and separating layers of myelin\n*******************************************************\e[22m\n    \e[1m\e[4m\"Neurilemma ? Ne vous prenez pas la tête !\"\e[21m\e[24m\n\n\n    \e[1m=> Soyez les bienvenus sur Neurilemma ! <=\e[21m\n\n\n  Neurilemma est un serveur utilisé par les plus \ngrandes entreprises du monde tel que \e[1mGoogle\e[21m, \e[1mFacebook\e[21m,\n\e[1mTwitter\e[21m, \e[1mAmazon\e[21m, et maintenant \e[1mvous\e[21m :D\n\n  La force de ce projet est sa simplicité et son\nefficacité. En effet, Neurilimma à été pensé pour vous\nsimplifier la vie, par deux talentueux étudiants \e[1mMelvin\nBELEMBERT\e[21m et \e[1mMaxime MONS\e[21m, qui eux, pour le coup, se sont\nbien compliqués la vie pour le réaliser.\n\n\n\t\t\t\t\t\e[7mVersion 1.1 beta\e[27m\n\n\n> ";
 	const char* message_bienvenue = "Hakuna Matata";
@@ -144,6 +152,8 @@ int main(int argc, char** argv){
 
 				// On lit jusqu'a la fin de l'en-tete, i.e. ligne = \r\n
 				skip_headers(buf, SIZE_BUF, client);
+				parsed_request.target = rewrite_target(parsed_request.target);
+				printf("%s\n", parsed_request.target);
 
 				// On envoie une réponse au client selon la nature de l'en-tete
 				send_response(client, valid_request, parsed_request, message_bienvenue);
