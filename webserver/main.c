@@ -13,6 +13,19 @@
 
 /*-----------*/
 
+enum http_method{
+	HTTP_GET ,
+	HTTP_UNSUPPORTED ,
+};
+typedef struct{
+	enum http_method method ;
+	int major_version ;
+	int minor_version ;
+	char * target ;
+}http_request ;
+
+/*-----------*/
+
 void traitement_signal(int sig){
 	printf("Signal %d reçu\n", sig);
 	while(waitpid(-1, NULL, WNOHANG) > 0);
@@ -35,6 +48,57 @@ void badRequest(FILE *client, int code){
 }
 void goodRequest(FILE *client, const char* msg){
 	fprintf(client, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s\r\n",(int)strlen(msg),msg);
+}
+
+char *fgets_or_exit(char *buffer, int size, FILE *stream){
+	if(fgets(buffer, size, stream) == NULL) exit(0);
+	return buffer;
+}
+
+int parse_http_request(char *request_line, http_request *request){
+	char* token = strtok(request_line, " ");
+	int i;
+	for(i = 0; i < 3; i++){
+		if(token == NULL) return 0;
+		if(i == 0) request -> method = (strcmp(token, "GET") == 0 ? HTTP_GET : HTTP_UNSUPPORTED);
+		else if(i == 1)
+			if(strcmp(token, "/") == 0) request -> target = "/";
+			else request -> target = token;
+		else
+			if(strncmp(token, "HTTP/1.0", 8) == 0 || strncmp(token, "HTTP/1.1", 8) == 0){
+				request -> major_version = (int)token[5];
+				request -> minor_version = (int)token[7];
+			}else return 0;
+		token = strtok(NULL, " ");
+	}return (token == NULL ? 1 : 0);
+}
+
+void skip_headers(char *buffer, int size, FILE *stream){
+	while(fgets_or_exit(buffer, size, stream))
+		if(strcmp(buffer, "\r\n") == 0) break;
+}
+
+void send_status(FILE *client, int code, char *reason_phrase){
+	fprintf(client, "HTTP/1.1 %d %s\r\n", code, reason_phrase);
+	fprintf(client, (code == 200 ? "Content-Length: " : "Connection: close\r\nContent-Length: "));
+}
+
+void send_response(FILE *client, int valid_request, http_request parsed_request, const char *message){
+	int ok = 0;
+	if(valid_request == 0){
+		send_status(client, 400, "Bad Request");
+		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 400: Bad Request") + 2, "Error 400: Bad Request");
+	}else if(parsed_request.method == HTTP_UNSUPPORTED){
+		send_status(client, 405, "Method Not Allowed");
+		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 405: Method Not Allowed") + 2, "Error 405: Method Not Allowed");
+	}else if(strcmp(parsed_request.target, "/") == 0){
+		send_status(client, 200, "OK");
+		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen(message) + 2, message);
+		ok = 1;
+	}else{
+		send_status(client, 404, "Not Found");
+		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 404: Not Found") + 2, "Error 404: Not Found");
+	}if(ok == 0) exit(0);
 }
 
 int main(int argc, char** argv){
@@ -68,32 +132,21 @@ int main(int argc, char** argv){
 			char buf[SIZE_BUF];
 			FILE *client = fdopen(socket_client, "w+");
 			while(1){
-				int request = 400; // 1 => OK; 400 => Bad Request; 404 => Not Found
+				int valid_request;
+				http_request parsed_request;
+				//int request = 400; // 1 => OK; 400 => Bad Request; 404 => Not Found
 				bzero(buf,SIZE_BUF);
 
 				// On récupére la première ligne de l'en-tete
-				if(fgets(buf, SIZE_BUF, client) == NULL) break;
-				// On vérifie si la première ligne est du type GET / HTTP/1.* (* = {0;1})
-				char* token = strtok(buf, " ");
-				char *comp[4] = {"GET", "/", "HTTP/1.0\r\n", "HTTP/1.1\r\n"};
-				int cpt;
-				int valide = 0;
-				for(cpt = 0; cpt < 4; cpt++){
-					if(strcmp(token, comp[cpt]) != 0) valide++;
-					if(cpt != 2) token = strtok(NULL, " ");
-				}if(valide == 1) request = 1;
-				else{
-					token = strtok(buf, " ");
-					if(strcmp(token, "GET") == 0) request = 404; 
-				}
+				fgets_or_exit(buf, SIZE_BUF, client);
+				// On vérifie si la première ligne est du type GET / HTTP/1.* (* = {0;1}))
+				valid_request = parse_http_request(buf, &parsed_request);
 
 				// On lit jusqu'a la fin de l'en-tete, i.e. ligne = \r\n
-				while(fgets(buf, SIZE_BUF, client))
-					if(strcmp(buf, "\r\n") == 0) break;
-				printf("%d\n", request);
+				skip_headers(buf, SIZE_BUF, client);
+
 				// On envoie une réponse au client selon la nature de l'en-tete
-				if(request == 1) goodRequest(client, message_bienvenue);
-				else badRequest(client, request);
+				send_response(client, valid_request, parsed_request, message_bienvenue);
 			}
 			close(socket_client);	
 			return 0;
