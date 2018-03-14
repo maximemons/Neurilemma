@@ -7,6 +7,9 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <dirent.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 /*-----------*/
 #define DEF_PORT 8080
@@ -107,7 +110,9 @@ char *rewrite_target(char *target){
 }
 
 int check_and_open(const char *target, const char *document_root){
-	
+	char *tmp = strcat(strcpy(tmp, document_root), target);
+	int open = open(tmp);
+	return (open == NULL) ? -1 : open;
 }
 
 int main(int argc, char** argv){
@@ -115,7 +120,7 @@ int main(int argc, char** argv){
 	./neurilemma [ROOT] [PORT]
 	***/
 	int socket_serveur, socket_client;
-	char *root;
+	char *root_directory;
 	//const char* message_bienvenue = "\n\n\e[2m*******************************************************\n	neurilemma - noun [nu̇r-ə-ˈle-mə] : the plasma\n  membrane surrounding a Schwann cell of a myelinated\n  nerve fiber and separating layers of myelin\n*******************************************************\e[22m\n    \e[1m\e[4m\"Neurilemma ? Ne vous prenez pas la tête !\"\e[21m\e[24m\n\n\n    \e[1m=> Soyez les bienvenus sur Neurilemma ! <=\e[21m\n\n\n  Neurilemma est un serveur utilisé par les plus \ngrandes entreprises du monde tel que \e[1mGoogle\e[21m, \e[1mFacebook\e[21m,\n\e[1mTwitter\e[21m, \e[1mAmazon\e[21m, et maintenant \e[1mvous\e[21m :D\n\n  La force de ce projet est sa simplicité et son\nefficacité. En effet, Neurilimma à été pensé pour vous\nsimplifier la vie, par deux talentueux étudiants \e[1mMelvin\nBELEMBERT\e[21m et \e[1mMaxime MONS\e[21m, qui eux, pour le coup, se sont\nbien compliqués la vie pour le réaliser.\n\n\n\t\t\t\t\t\e[7mVersion 1.1 beta\e[27m\n\n\n> ";
 	const char* message_bienvenue = "Hakuna Matata";
 
@@ -124,11 +129,11 @@ int main(int argc, char** argv){
 	//On vérifie si on donne un port particulier au serveur
 	socket_serveur = (argc == 2) ? creer_serveur(DEF_PORT) : creer_serveur(atoi(argv[2]));
 	printf("Sever running on port %d\n", (argc == 2) ? DEF_PORT : atoi(argv[2]));
-	root = (argc > 1) ? ((opendir(argv[1]) == NULL) ? NULL : argv[1]) : NULL;
-	if(root == NULL){
+	root_directory = (argc > 1) ? ((opendir(argv[1]) == NULL) ? NULL : argv[1]) : NULL;
+	if(root_directory == NULL){
 		printf("Error root directory\n");
 		exit(1);
-	}else printf("Root directory set on '%s'\n", root);
+	}else printf("Root directory set on '%s'\n", root_directory);
 	fflush(stdout);
 
 	while(1){
