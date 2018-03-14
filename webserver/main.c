@@ -66,7 +66,7 @@ int parse_http_request(char *request_line, http_request *request){
 		if(token == NULL) return 0;
 		if(i == 0) request -> method = (strcmp(token, "GET") == 0 ? HTTP_GET : HTTP_UNSUPPORTED);
 		else if(i == 1){
-			request->target = (char*) malloc(sizeof(char)*(strlen(token)+1) );
+			request->target = (char*) malloc(sizeof(char)*(strlen(token)+1));
 			strcpy(request->target, token);
 		}else
 			if(strncmp(token, "HTTP/1.0", 8) == 0 || strncmp(token, "HTTP/1.1", 8) == 0){
@@ -110,9 +110,10 @@ char *rewrite_target(char *target){
 }
 
 int check_and_open(const char *target, const char *document_root){
-	char *tmp = strcat(strcpy(tmp, document_root), target);
-	int open = open(tmp);
-	return (open == NULL) ? -1 : open;
+	char tmp[(int)strlen(document_root) + (int)strlen(target)];
+	strcpy(tmp, document_root);
+	strcat(tmp, target);
+	return open(tmp, O_RDONLY);
 }
 
 int main(int argc, char** argv){
@@ -137,7 +138,7 @@ int main(int argc, char** argv){
 	fflush(stdout);
 
 	while(1){
-		socket_client = accept (socket_serveur, NULL, NULL);
+		socket_client = accept(socket_serveur, NULL, NULL);
 
 		if(socket_client == -1){
 			perror("accept");
@@ -162,8 +163,8 @@ int main(int argc, char** argv){
 
 				// On lit jusqu'a la fin de l'en-tete, i.e. ligne = \r\n
 				skip_headers(buf, SIZE_BUF, client);
-				printf("->%d\n=>%s\n", valid_request, rewrite_target(parsed_request.target));
-				fflush(stdout);
+
+				int fd = check_and_open(rewrite_target(parsed_request.target), root_directory);
 
 				// On envoie une réponse au client selon la nature de l'en-tete
 				send_response(client, valid_request, parsed_request, message_bienvenue);
