@@ -97,7 +97,8 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 405: Method Not Allowed") + 2, "Error 405: Method Not Allowed");
 	}else if(strcmp(parsed_request.target, "/") == 0 || fd > 0){
 		send_status(client, 200, "OK");
-		fprintf(client, "%d\r\n\r\n%s\r\n", size + 2, message);
+		fprintf(client, "%d\r\n\r\n%s\r\n", /*size*/ (int)strlen(message) + 2, message);
+		printf("size = %d\n", size);
 		ok = 1;
 	}else{
 		send_status(client, 404, "Not Found");
@@ -131,10 +132,15 @@ int main(int argc, char** argv){
 	/***
 	./neurilemma [ROOT] [PORT]
 	***/
+
+	if(argc == 1){
+		printf("Command error :\n\t%s root_directory [port]\n", argv[0]);
+		exit(0);
+	}
+
 	int socket_serveur, socket_client;
 	char *root_directory;
-	const char* message_bienvenue = "\n\n\e[2m*******************************************************\n	neurilemma - noun [nu̇r-ə-ˈle-mə] : the plasma\n  membrane surrounding a Schwann cell of a myelinated\n  nerve fiber and separating layers of myelin\n*******************************************************\e[22m\n    \e[1m\e[4m\"Neurilemma ? Ne vous prenez pas la tête !\"\e[21m\e[24m\n\n\n    \e[1m=> Soyez les bienvenus sur Neurilemma ! <=\e[21m\n\n\n  Neurilemma est un serveur utilisé par les plus \ngrandes entreprises du monde tel que \e[1mGoogle\e[21m, \e[1mFacebook\e[21m,\n\e[1mTwitter\e[21m, \e[1mAmazon\e[21m, et maintenant \e[1mvous\e[21m :D\n\n  La force de ce projet est sa simplicité et son\nefficacité. En effet, Neurilimma à été pensé pour vous\nsimplifier la vie, par deux talentueux étudiants \e[1mMelvin\nBELEMBERT\e[21m et \e[1mMaxime MONS\e[21m, qui eux, pour le coup, se sont\nbien compliqués la vie pour le réaliser.\n\n\n\t\t\t\t\t\e[7mVersion 1.1 beta\e[27m\n\n\n> ";
-	//const char* message_bienvenue = "Hakuna Matata";
+	const char* message_bienvenue = "Hakuna Matata";
 
 	initialiser_signaux();
 
