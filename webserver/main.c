@@ -6,6 +6,7 @@
 #include "socket.h"
 #include <signal.h>
 #include <sys/wait.h>
+#include <dirent.h>
 
 /*-----------*/
 #define DEF_PORT 8080
@@ -105,6 +106,10 @@ char *rewrite_target(char *target){
 	return (strchr(target, '?') != NULL ? strtok(target, "?") : target);
 }
 
+int check_and_open(const char *target, const char *document_root){
+	
+}
+
 int main(int argc, char** argv){
 	/***
 	./neurilemma [ROOT] [PORT]
@@ -119,8 +124,12 @@ int main(int argc, char** argv){
 	//On vérifie si on donne un port particulier au serveur
 	socket_serveur = (argc == 2) ? creer_serveur(DEF_PORT) : creer_serveur(atoi(argv[2]));
 	printf("Sever running on port %d\n", (argc == 2) ? DEF_PORT : atoi(argv[2]));
+	root = (argc > 1) ? ((opendir(argv[1]) == NULL) ? NULL : argv[1]) : NULL;
+	if(root == NULL){
+		printf("Error root directory\n");
+		exit(1);
+	}else printf("Root directory set on '%s'\n", root);
 	fflush(stdout);
-	root = (argc > 1) ? argv[1] : NULL;
 
 	while(1){
 		socket_client = accept (socket_serveur, NULL, NULL);
