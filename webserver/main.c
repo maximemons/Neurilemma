@@ -16,7 +16,6 @@
 #define SIZE_BUF 4096
 
 /*-----------*/
-
 enum http_method{
 	HTTP_GET,
 	HTTP_UNSUPPORTED,
@@ -27,6 +26,21 @@ typedef struct{
 	int minor_version;
 	char *target;
 }http_request;
+
+/*-----------*/
+void traitement_signal(int sig);
+void initialiser_signaux(void);
+void badRequest(FILE *client, int code);
+void goodRequest(FILE *client, const char* msg);
+char *fgets_or_exit(char *buffer, int size, FILE *stream);
+int parse_http_request(char *request_line, http_request *request);
+void skip_headers(char *buffer, int size, FILE *stream);
+void send_status(FILE *client, int code, char *reason_phrase);
+void send_response(FILE *client, int valid_request, http_request parsed_request, int size, int fd, int socket_client, char *root_directory);
+char *rewrite_target(char *target);
+int check_and_open(const char *target, const char *document_root);
+int get_file_size(int fd);
+int copy(int in, int out);
 
 /*-----------*/
 
@@ -87,7 +101,7 @@ void send_status(FILE *client, int code, char *reason_phrase){
 	fprintf(client, (code == 200 ? "Content-Length: " : "Connection: close\r\nContent-Length: "));
 }
 
-void send_response(FILE *client, int valid_request, http_request parsed_request, const char *message, int size, int fd){
+void send_response(FILE *client, int valid_request, http_request parsed_request, int size, int fd, int socket_client, char *root_directory){
 	int ok = 0;
 	if(valid_request == 0){
 		send_status(client, 400, "Bad Request");
@@ -97,12 +111,22 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 405: Method Not Allowed") + 2, "Error 405: Method Not Allowed");
 	}else if(strcmp(parsed_request.target, "/") == 0 || fd > 0){
 		send_status(client, 200, "OK");
-		fprintf(client, "%d\r\n\r\n%s\r\n", /*size*/ (int)strlen(message) + 2, message);
-		printf("size = %d\n", size);
+		fprintf(client, "%d\r\n\r\n", size + 2);
+		fflush(client);
+		copy(fd, socket_client);
+		fprintf(client, "\r\n");
 		ok = 1;
 	}else{
 		send_status(client, 404, "Not Found");
-		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 404: Not Found") + 2, "Error 404: Not Found");
+		int fd_404 = open(strcat(root_directory, (strcmp(root_directory + (int)strlen(root_directory) - 1, "/") == 0)? "errors/error404.html" : "/errors/error404.html"), O_RDONLY);
+		if(fd_404 > 0){
+			fprintf(client, "%d\r\n\r\n", get_file_size(fd_404));
+			fflush(client);
+			copy(fd_404, socket_client);
+			fprintf(client, "\r\n");
+			close(fd_404);
+		}
+		else fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 404: Not Found") + 2, "Error 404: Not Found");
 	}if(ok == 0) exit(0);
 }
 
@@ -120,19 +144,20 @@ int check_and_open(const char *target, const char *document_root){
 }
 
 int get_file_size(int fd){
-	return lseek(fd, 0, SEEK_END) + 1;
+	return lseek(fd, 0, SEEK_END);
 }
 
 int copy(int in, int out){
-	out = dup(in);
-	return out;
+	lseek(in, 0, SEEK_SET);
+	int tmp, cpt = 0;
+	char buffer[1024];
+	while((tmp = read(in, buffer, sizeof(buffer))) > 0){
+		if(write(out, buffer, sizeof(buffer)) < 0) perror("write error\n");
+		cpt += tmp;
+	}return (get_file_size(in) == get_file_size(out)) ? 1: -1;
 }
 
 int main(int argc, char** argv){
-	/***
-	./neurilemma [ROOT] [PORT]
-	***/
-
 	if(argc == 1){
 		printf("Command error :\n\t%s root_directory [port]\n", argv[0]);
 		exit(0);
@@ -140,7 +165,7 @@ int main(int argc, char** argv){
 
 	int socket_serveur, socket_client;
 	char *root_directory;
-	const char* message_bienvenue = "Hakuna Matata";
+	//const char* message_bienvenue = "Hakuna Matata";
 
 	initialiser_signaux();
 
@@ -184,7 +209,8 @@ int main(int argc, char** argv){
 				int fd = check_and_open(rewrite_target(parsed_request.target), root_directory);
 
 				// On envoie une réponse au client selon la nature de l'en-tete
-				send_response(client, valid_request, parsed_request, message_bienvenue, get_file_size(fd), fd);
+				send_response(client, valid_request, parsed_request, get_file_size(fd), fd, socket_client, root_directory);
+				close(fd);
 			}
 			close(socket_client);	
 			return 0;
