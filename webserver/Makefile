@@ -2,7 +2,7 @@
 # ainsi que les paramètres de compilation
 CC=gcc
 LD=gcc
-CFLAGS=-Wall -W -Werror #-Wextra -ansi -pedantic -D_XOPEN_SOURCE=500
+CFLAGS=-Wall -W -Werror -Wextra -pedantic #-ansi -D_XOPEN_SOURCE=500 
 LDFLAGS=-g
 # Le nom de l’exécutable à fabriquer
 EXE=neurilemma
