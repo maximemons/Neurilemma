@@ -1,15 +1,19 @@
+#include "socket.h"
+#include "stats.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include "socket.h"
 #include <signal.h>
 #include <sys/wait.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <math.h>
 
 /*-----------*/
 #define DEF_PORT 8080
@@ -18,7 +22,7 @@
 /*-----------*/
 enum http_method{
 	HTTP_GET,
-	HTTP_UNSUPPORTED,
+	HTTP_UNSUPPORTED
 };
 typedef struct{
 	enum http_method method;
@@ -50,9 +54,10 @@ void traitement_signal(int sig){
 }
 
 void initialiser_signaux(void){
+	struct sigaction sa;
+
 	if(signal(SIGPIPE, SIG_IGN) == SIG_ERR)
 		perror("signal");
-	struct sigaction sa;
 	sa.sa_handler = traitement_signal;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
@@ -76,6 +81,7 @@ char *fgets_or_exit(char *buffer, int size, FILE *stream){
 int parse_http_request(char *request_line, http_request *request){
 	char* token = strtok(request_line, " ");
 	int i;
+
 	for(i = 0; i < 3; i++){
 		if(token == NULL) return 0;
 		if(i == 0) request -> method = (strcmp(token, "GET") == 0 ? HTTP_GET : HTTP_UNSUPPORTED);
@@ -101,24 +107,59 @@ void send_status(FILE *client, int code, char *reason_phrase){
 	fprintf(client, (code == 200 ? "Content-Length: " : "Connection: close\r\nContent-Length: "));
 }
 
+int getIntegerLength(int number){
+	int i = 1;
+	int size = 0;
+	while(i <= abs(number)){
+		i*=10;
+		size++;
+	}return size;
+}
+
 void send_response(FILE *client, int valid_request, http_request parsed_request, int size, int fd, int socket_client, char *root_directory){
 	int ok = 0;
+
 	if(valid_request == 0){
+		get_stats() -> ko_400++;
 		send_status(client, 400, "Bad Request");
 		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 400: Bad Request") + 2, "Error 400: Bad Request");
 	}else if(parsed_request.method == HTTP_UNSUPPORTED){
 		send_status(client, 405, "Method Not Allowed");
 		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 405: Method Not Allowed") + 2, "Error 405: Method Not Allowed");
-	}else if(strcmp(parsed_request.target, "/") == 0 || fd > 0){
+	}else if(strcmp(parsed_request.target, "!403!") == 0){
+		send_status(client, 403, "Forbidden");
+		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 403: Forbidden") + 2, "Error 403: Forbidden");
+	}else if(strcmp(parsed_request.target, "/") == 0 || strcmp(parsed_request.target, "/stats") == 0 || fd > 0){
+		get_stats() -> ok_200++;
 		send_status(client, 200, "OK");
-		fprintf(client, "%d\r\n\r\n", size + 2);
-		fflush(client);
-		copy(fd, socket_client);
-		fprintf(client, "\r\n");
+		if(strcmp(parsed_request.target, "/stats") == 0){
+			web_stats *stats = get_stats();
+
+			fprintf(client, "%d\r\n\r\n", (int)((strlen("served_connections : \n")) + getIntegerLength(stats -> served_connections) + 1 + 
+										  (strlen("served_requests : \n")) + getIntegerLength(stats -> served_requests) + 1 +
+										  (strlen("ok_200 : \n")) + getIntegerLength(stats -> ok_200) + 1 +
+										  (strlen("ko_400 : \n")) + getIntegerLength(stats -> ko_400) + 1 +
+										  (strlen("ko_403 : \n")) + getIntegerLength(stats -> ko_403) + 1 +
+										  (strlen("ko_404 : ")) + getIntegerLength(stats -> ko_404) + 1));
+			fprintf(client, "served_connections : %d\n", stats -> served_connections);
+			fprintf(client, "served_requests : %d\n", stats -> served_requests);
+			fprintf(client, "ok_200 : %d\n", stats -> ok_200);
+			fprintf(client, "ko_400 : %d\n", stats -> ko_400);
+			fprintf(client, "ko_403 : %d\n", stats -> ko_403);
+			fprintf(client, "ko_404 : %d\n", stats -> ko_404);
+			fprintf(client, "\r\n");
+		}else{
+			fprintf(client, "%d\r\n\r\n", size + 2);
+			fflush(client);
+			copy(fd, socket_client);
+			fprintf(client, "\r\n");
+		}
 		ok = 1;
 	}else{
+		int fd_404 = open(strcat(root_directory, (strcmp(root_directory + (int)strlen(root_directory) - 1, "/") == 0) ? "errors/error404.html" : "/errors/error404.html"), O_RDONLY);
+		
+		get_stats() -> ko_404++;
 		send_status(client, 404, "Not Found");
-		int fd_404 = open(strcat(root_directory, (strcmp(root_directory + (int)strlen(root_directory) - 1, "/") == 0)? "errors/error404.html" : "/errors/error404.html"), O_RDONLY);
 		if(fd_404 > 0){
 			fprintf(client, "%d\r\n\r\n", get_file_size(fd_404));
 			fflush(client);
@@ -130,12 +171,29 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 	}if(ok == 0) exit(0);
 }
 
+int find(char *target, char *seq){
+	int i, j = 0;
+
+	for(i = 0; i < (int)strlen(target); i++){
+		j = 0;
+		if(target[i] == seq[j]){
+			for(j = 1; j < (int)strlen(seq); j++){
+				if(target[i + j] != seq[j]) break;
+			}
+			if(j == (int)strlen(seq)) return 1;
+		}
+
+	}return -1;
+}
+
 char *rewrite_target(char *target){
-	return ((strcmp(target, "/") == 0) ? "/index.html" : strchr(target, '?') != NULL ? strtok(target, "?") : target);
+	if(find(target, "../") == 1) return "!403!";
+	else return ((strcmp(target, "/") == 0) ? "/index.html" : strchr(target, '?') != NULL ? strtok(target, "?") : target);
 }
 
 int check_and_open(const char *target, const char *document_root){
-	char tmp[(int)((strcmp(document_root + strlen(document_root) - 1, "/") == 0) ? strlen(document_root) - 1 : strlen(document_root)) + (int)((strncmp(target, "/", 1) == 0) ? strlen(target) - 1 : strlen(target)) + (strlen(target) == 1) ? strlen("index.html") : 0];
+	char *tmp = (char *) malloc((int)((strcmp(document_root + strlen(document_root) - 1, "/") == 0) ? strlen(document_root) - 1 : strlen(document_root)) + (int)((strncmp(target, "/", 1) == 0) ? strlen(target) - 1 : strlen(target)) + (strlen(target) == 1) ? strlen("index.html") : 0);
+	
 	strncpy(tmp, document_root, (strcmp(document_root + strlen(document_root) - 1, "/") == 0 ? strlen(document_root) - 1 : strlen(document_root)));
 	strcat(tmp, "/");
 	strcat(tmp, (strncmp(target, "/", 1) == 0 ? target + 1 : target));
@@ -148,9 +206,10 @@ int get_file_size(int fd){
 }
 
 int copy(int in, int out){
-	lseek(in, 0, SEEK_SET);
 	int tmp, cpt = 0;
 	char buffer[1024];
+
+	lseek(in, 0, SEEK_SET);
 	while((tmp = read(in, buffer, sizeof(buffer))) > 0){
 		if(write(out, buffer, sizeof(buffer)) < 0) perror("write error\n");
 		cpt += tmp;
@@ -158,18 +217,16 @@ int copy(int in, int out){
 }
 
 int main(int argc, char** argv){
+	int socket_serveur, socket_client;
+	char *root_directory;
+
 	if(argc == 1){
 		printf("Command error :\n\t%s root_directory [port]\n", argv[0]);
 		exit(0);
 	}
-
-	int socket_serveur, socket_client;
-	char *root_directory;
-	//const char* message_bienvenue = "Hakuna Matata";
-
 	initialiser_signaux();
 
-	//On vérifie si on donne un port particulier au serveur
+	/* => On vérifie si on donne un port particulier au serveur*/
 	socket_serveur = (argc == 2) ? creer_serveur(DEF_PORT) : creer_serveur(atoi(argv[2]));
 	printf("Sever running on port %d\n", (argc == 2) ? DEF_PORT : atoi(argv[2]));
 	root_directory = (argc > 1) ? ((opendir(argv[1]) == NULL) ? NULL : argv[1]) : NULL;
@@ -179,6 +236,8 @@ int main(int argc, char** argv){
 	}else printf("Root directory set on '%s'\n", root_directory);
 	fflush(stdout);
 
+	init_stats();
+
 	while(1){
 		socket_client = accept(socket_serveur, NULL, NULL);
 
@@ -186,29 +245,31 @@ int main(int argc, char** argv){
 			perror("accept");
 			return -1;
 		}
-
+		get_stats() -> served_connections++;
 		if(fork() == 0){
-			close(socket_serveur);
-			//write(socket_client, message_bienvenue, strlen(message_bienvenue));
 			char buf[SIZE_BUF];
 			FILE *client = fdopen(socket_client, "w+");
+			
+			close(socket_serveur);
+			/*write(socket_client, message_bienvenue, strlen(message_bienvenue));*/
 			while(1){
-				int valid_request;
+				int valid_request, fd;
 				http_request parsed_request;
-				//int request = 400; // 1 => OK; 400 => Bad Request; 404 => Not Found
+				/* => int request = 400; // 1 => OK; 400 => Bad Request; 404 => Not Found*/
 				bzero(buf,SIZE_BUF);
 
-				// On récupére la première ligne de l'en-tete
+				get_stats() -> served_requests++;
+				/* => On récupére la première ligne de l'en-tete*/
 				fgets_or_exit(buf, SIZE_BUF, client);
-				// On vérifie si la première ligne est du type GET / HTTP/1.* (* = {0;1}))
+				/* => On vérifie si la première ligne est du type GET / HTTP/1.* (* = {0;1}))*/
 				valid_request = parse_http_request(buf, &parsed_request);
 
-				// On lit jusqu'a la fin de l'en-tete, i.e. ligne = \r\n
+				/* => On lit jusqu'a la fin de l'en-tete, i.e. ligne = \r\n*/
 				skip_headers(buf, SIZE_BUF, client);
 
-				int fd = check_and_open(rewrite_target(parsed_request.target), root_directory);
+				fd = check_and_open(rewrite_target(parsed_request.target), root_directory);
 
-				// On envoie une réponse au client selon la nature de l'en-tete
+				/* => On envoie une réponse au client selon la nature de l'en-tete*/
 				send_response(client, valid_request, parsed_request, get_file_size(fd), fd, socket_client, root_directory);
 				close(fd);
 			}
