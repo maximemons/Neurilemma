@@ -45,6 +45,7 @@ char *rewrite_target(char *target);
 int check_and_open(const char *target, const char *document_root);
 int get_file_size(int fd);
 int copy(int in, int out);
+int find(char *target, char *seq);
 
 /*-----------*/
 
@@ -126,9 +127,6 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 	}else if(parsed_request.method == HTTP_UNSUPPORTED){
 		send_status(client, 405, "Method Not Allowed");
 		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 405: Method Not Allowed") + 2, "Error 405: Method Not Allowed");
-	}else if(strcmp(parsed_request.target, "!403!") == 0){
-		send_status(client, 403, "Forbidden");
-		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 403: Forbidden") + 2, "Error 403: Forbidden");
 	}else if(strcmp(parsed_request.target, "/") == 0 || strcmp(parsed_request.target, "/stats") == 0 || fd > 0){
 		get_stats() -> ok_200++;
 		send_status(client, 200, "OK");
@@ -156,18 +154,23 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 		}
 		ok = 1;
 	}else{
-		int fd_404 = open(strcat(root_directory, (strcmp(root_directory + (int)strlen(root_directory) - 1, "/") == 0) ? "errors/error404.html" : "/errors/error404.html"), O_RDONLY);
-		
-		get_stats() -> ko_404++;
-		send_status(client, 404, "Not Found");
-		if(fd_404 > 0){
-			fprintf(client, "%d\r\n\r\n", get_file_size(fd_404));
-			fflush(client);
-			copy(fd_404, socket_client);
-			fprintf(client, "\r\n");
-			close(fd_404);
+		if(find(parsed_request.target, "../")){
+			get_stats() -> ko_403++;
+			send_status(client, 403, "Forbidden");
+			fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 403: Forbidden") + 2, "Error 403: Forbidden");
+		}else{		
+			int fd_404 = open(strcat(root_directory, (strcmp(root_directory + (int)strlen(root_directory) - 1, "/") == 0) ? "errors/error404.html" : "/errors/error404.html"), O_RDONLY);
+			
+			get_stats() -> ko_404++;
+			send_status(client, 404, "Not Found");
+			if(fd_404 > 0){
+				fprintf(client, "%d\r\n\r\n", get_file_size(fd_404));
+				fflush(client);
+				copy(fd_404, socket_client);
+				fprintf(client, "\r\n");
+				close(fd_404);
+			}else fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 404: Not Found") + 2, "Error 404: Not Found");
 		}
-		else fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 404: Not Found") + 2, "Error 404: Not Found");
 	}if(ok == 0) exit(0);
 }
 
@@ -179,16 +182,13 @@ int find(char *target, char *seq){
 		if(target[i] == seq[j]){
 			for(j = 1; j < (int)strlen(seq); j++){
 				if(target[i + j] != seq[j]) break;
-			}
-			if(j == (int)strlen(seq)) return 1;
+			}if(j == (int)strlen(seq)) return 1;
 		}
-
 	}return -1;
 }
 
 char *rewrite_target(char *target){
-	if(find(target, "../") == 1) return "!403!";
-	else return ((strcmp(target, "/") == 0) ? "/index.html" : strchr(target, '?') != NULL ? strtok(target, "?") : target);
+	return ((strcmp(target, "/") == 0) ? "/index.html" : strchr(target, '?') != NULL ? strtok(target, "?") : target);
 }
 
 int check_and_open(const char *target, const char *document_root){
