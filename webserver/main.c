@@ -127,7 +127,7 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 	}else if(parsed_request.method == HTTP_UNSUPPORTED){
 		send_status(client, 405, "Method Not Allowed");
 		fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 405: Method Not Allowed") + 2, "Error 405: Method Not Allowed");
-	}else if(strcmp(parsed_request.target, "/") == 0 || strcmp(parsed_request.target, "/stats") == 0 || fd > 0){
+	}else if((strcmp(parsed_request.target, "/") == 0 && fd > 0) || strcmp(parsed_request.target, "/stats") == 0 || fd > 0){
 		get_stats() -> ok_200++;
 		send_status(client, 200, "OK");
 		if(strcmp(parsed_request.target, "/stats") == 0){
