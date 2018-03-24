@@ -154,7 +154,7 @@ void send_response(FILE *client, int valid_request, http_request parsed_request,
 		}
 		ok = 1;
 	}else{
-		if(find(parsed_request.target, "../")){
+		if(find(parsed_request.target, "../") == 1){
 			get_stats() -> ko_403++;
 			send_status(client, 403, "Forbidden");
 			fprintf(client, "%d\r\n\r\n%s\r\n", (int)strlen("Error 403: Forbidden") + 2, "Error 403: Forbidden");
